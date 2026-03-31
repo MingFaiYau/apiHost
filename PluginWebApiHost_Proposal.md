@@ -4,16 +4,17 @@
 
 ### 1.1 Project Vision / 項目願景
 
-This proposal describes a plugin-based web API hosting framework built on .NET 8+, designed to provide a flexible and extensible foundation for hosting multiple web services with dynamic plugin loading capabilities.
+This proposal describes a plugin-based web API hosting framework built on .NET 9+, designed to provide a flexible and extensible foundation for hosting multiple web services with dynamic plugin loading capabilities and hot-reload support.
 
-本提案描述了一個基於 .NET 8+ 構建的插件式 Web API 托管框架，旨在提供一個靈活且可擴展的基礎設施，用於托管具有動態插件加載功能的多個 Web 服務。
+本提案描述了一個基於 .NET 9+ 構建的插件式 Web API 托管框架，旨在提供一個靈活且可擴展的基礎設施，用於托管具有動態插件加載功能和熱重載支持的多個 Web 服務。
 
 ### 1.2 Core Features / 核心功能
 
+- **Dynamic Plugin Loading** - Load plugins from `plugins/functions/` folder at runtime
+- **Hot-Reload Support** - Add, remove, or modify plugins without restarting the host
 - **Generic CRUD Service** - Built-in support for generic Create, Read, Update, Delete operations
 - **Custom Business Services** - Support for additional custom web services beyond CRUD
-- **Schema Discovery Service** - A dedicated service providing schema information for all other services
-- **Dynamic Plugin Loading** - Plugins identified by function ID and loaded from structured folders
+- **Schema Discovery Service** - Built-in service providing schema information for all registered plugins
 
 ---
 
@@ -27,22 +28,25 @@ This proposal describes a plugin-based web API hosting framework built on .NET 8
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                   Core Services                           │   │
 │  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐     │   │
-│  │  │   Router     │ │  Plugin      │ │   Schema     │     │   │
-│  │  │   Manager    │ │  Loader      │ │   Service    │     │   │
+│  │  │   Router     │ │  Plugin      │ │   Schema    │     │   │
+│  │  │   Manager    │ │  Loader      │ │  Service    │     │   │
+│  │  │              │ │  (Hot-Reload)│ │             │     │   │
 │  │  └──────────────┘ └──────────────┘ └──────────────┘     │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                              │                                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │              Shared Library (Common)                     │   │
-│  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ │   │
-│  │  │ DB     │ │ Schema │ │ Config │ │Logging │ │Utility│ │   │
-│  │  │ Layer  │ │        │ │        │ │        │ │       │ │   │
-│  │  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ │   │
+│  │                   Shared Library                          │   │
+│  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐           │   │
+│  │  │Plugin  │ │Schema  │ │ Config │ │  IPlugin    │           │   │
+│  │  │Abstraction│ │        │ │        │ │Interfaces  │           │   │
+│  │  └────────┘ └────────┘ └────────┘ └────────┘           │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                              │                                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                   Plugin Folders                         │   │
-│  │  plugins\1\1000\    plugins\2\2000\    plugins\3\3000\   │   │
+│  │  plugins/functions/Plugin1000.dll                       │   │
+│  │  plugins/functions/Plugin2000.dll                       │   │
+│  │  plugins/functions/Plugin3000.dll                       │   │
 │  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -51,54 +55,54 @@ This proposal describes a plugin-based web API hosting framework built on .NET 8
 
 | Component | Description | 功能說明 |
 |-----------|-------------|---------|
-| **Router Manager** | Routes incoming requests to appropriate plugins based on function ID | 根據功能 ID 將傳入請求路由到相應的插件 |
-| **Plugin Loader** | Dynamically loads and manages plugin assemblies | 動態加載和管理插件程序集 |
-| **Schema Service** | Provides schema information for all registered services | 為所有已註冊的服務提供 schema 信息 |
-| **Shared Library** | Common utilities, DB layer, logging, configuration | 通用工具、數據庫層、日誌、配置 |
+| **Plugin Router** | Routes incoming requests to appropriate plugins dynamically | 動態將傳入請求路由到相應的插件 |
+| **Plugin Loader** | Dynamically loads, manages, and hot-reloads plugin assemblies | 動態加載、管理和熱重載插件程序集 |
+| **Schema Service** | Provides schema information for all registered plugins | 為所有已註冊的插件提供 schema 信息 |
+| **Shared Library** | Common interfaces (IPlugin, ICrudPlugin, ICustomPlugin) | 通用介面（IPlugin、ICrudPlugin、ICustomPlugin） |
 
 ---
 
 ## 3. Folder Structure / 資料夾結構
 
-### 3.1 Plugin Directory Organization / 插件目錄組織
+### 3.1 Project Organization / 項目組織
 
 ```
 project-root/
 ├── src/
 │   ├── ApiHost/                    # Main API Host project
-│   ├── SharedLib/                  # Shared library (Common)
-│   │   ├── SharedLib.DB/            # Database layer
-│   │   ├── SharedLib.Schema/       # Schema definitions
-│   │   ├── SharedLib.Config/       # Configuration
-│   │   ├── SharedLib.Logging/      # Logging infrastructure
-│   │   └── SharedLib.Utils/         # Utility functions
-│   └── Plugins/                    # Plugin projects (example)
-│       ├── Plugins.sln
-│       ├── Plugin1000/             # Function ID 1000
-│       ├── Plugin2000/             # Function ID 2000
-│       └── Plugin3000/             # Function ID 3000
-└── plugins/                        # Runtime plugin storage (deployed)
-    ├── 1/                          # First digit: 1
-    │   └── 1000/                   # Function ID 1000
-    │       └── Plugin1000.dll
-    ├── 2/                          # First digit: 2
-    │   └── 2000/                   # Function ID 2000
-    │       └── Plugin2000.dll
-    └── 3/                          # First digit: 3
-        └── 3000/                   # Function ID 3000
-            └── Plugin3000.dll
+│   │   ├── Services/                # Core services
+│   │   │   ├── PluginLoader.cs     # Plugin loader with hot-reload
+│   │   │   ├── PluginRouter.cs     # Dynamic request router
+│   │   │   └── SchemaServiceImpl.cs
+│   │   └── appsettings.json
+│   ├── SharedLib/                  # Shared interfaces & models
+│   │   ├── IPlugin.cs              # Base plugin interface
+│   │   ├── ICrudPlugin.cs          # CRUD plugin interface
+│   │   ├── ICustomPlugin.cs        # Custom plugin interface
+│   │   ├── Config/                 # Configuration models
+│   │   └── Schema/                 # Schema definitions
+│   └── Plugins/                    # Plugin projects
+│       ├── PluginBase/             # Base classes for plugins
+│       ├── Plugin1000/             # Example: Product CRUD
+│       └── Plugin2000/             # Example: Custom Report
+├── plugins/
+│   └── functions/                  # Runtime plugin storage
+│       ├── Plugin1000.dll
+│       ├── Plugin2000.dll
+│       └── *.dll                   # Add more plugins here
+└── README.md
 ```
 
-### 3.2 Plugin Folder Naming Convention / 插件資料夾命名規範
+### 3.2 Plugin Location / 插件位置
 
-- Function ID `1XXX` → `plugins/1/1XXX/`
-- Function ID `2XXX` → `plugins/2/2XXX/`
-- Function ID `9XXX` → `plugins/9/9XXX/`
+All plugin DLLs are placed directly in `plugins/functions/` folder:
 
-This pattern provides:
-- Easy manual navigation to specific functions
-- Logical grouping by function category (1xxx, 2xxx, etc.)
-- Prevents folder bloat in root directory
+```
+plugins/functions/
+├── Plugin1000.dll    # Function ID 1000
+├── Plugin2000.dll    # Function ID 2000
+└── Plugin3000.dll    # Function ID 3000
+```
 
 ---
 
@@ -111,103 +115,64 @@ All plugins must implement the `IPlugin` interface:
 ```csharp
 namespace SharedLib.Plugin.Abstractions
 {
-    /// <summary>
-    /// Base interface for all plugins / 所有插件的基礎介面
-    /// </summary>
     public interface IPlugin
     {
-        /// <summary>
-        /// Unique function ID / 唯一的功能 ID
-        /// </summary>
         int FunctionId { get; }
-
-        /// <summary>
-        /// Plugin name / 插件名稱
-        /// </summary>
         string Name { get; }
-
-        /// <summary>
-        /// Plugin version / 插件版本
-        /// </summary>
         string Version { get; }
-
-        /// <summary>
-        /// Initialize the plugin / 初始化插件
-        /// </summary>
         Task InitializeAsync(IServiceProvider serviceProvider);
-
-        /// <summary>
-        /// Get the HTTP routes handled by this plugin / 獲取此插件處理的 HTTP 路由
-        /// </summary>
         IReadOnlyList<PluginRoute> GetRoutes();
     }
 
-    /// <summary>
-    /// Represents a route exposed by a plugin / 表示插件公開的路由
-    /// </summary>
-    public record PluginRoute(
-        string Path,
-        HttpMethod Method,
-        Type RequestType,
-        Type ResponseType);
+    public class PluginRoute
+    {
+        public string Path { get; init; }
+        public string Method { get; init; }  // "GET", "POST", "PUT", "DELETE"
+        public Type? RequestType { get; init; }
+        public Type? ResponseType { get; init; }
+    }
 }
 ```
 
 ### 4.2 CRUD Service Interface / CRUD 服務介面
 
-For generic CRUD functionality, plugins implement `ICrudPlugin`:
+For generic CRUD functionality, plugins inherit from `CrudPluginBase`:
 
 ```csharp
-namespace SharedLib.Plugin.Abstractions
+namespace PluginBase
 {
-    /// <summary>
-    /// Interface for generic CRUD operations / 通用 CRUD 操作的介面
-    /// </summary>
-    public interface ICrudPlugin : IPlugin
+    public abstract class CrudPluginBase<TEntity> : PluginBase, ICrudPlugin<TEntity> where TEntity : class
     {
-        /// <summary>
-        /// Entity type for this CRUD service / 此 CRUD 服務的實體類型
-        /// </summary>
-        Type EntityType { get; }
+        public Type EntityType => typeof(TEntity);
 
-        /// <summary>
-        /// Repository for data access / 數據訪問的儲存庫
-        /// </summary>
-        IRepository<Entity> Repository { get; }
-    }
+        public abstract Task<IReadOnlyList<TEntity>> GetAllAsync();
+        public abstract Task<TEntity?> GetByIdAsync(int id);
+        public abstract Task<TEntity> CreateAsync(TEntity entity);
+        public abstract Task<TEntity> UpdateAsync(TEntity entity);
+        public abstract Task<bool> DeleteAsync(int id);
 
-    /// <summary>
-    /// Generic CRUD plugin with type parameter / 帶類型參數的通用 CRUD 插件
-    /// </summary>
-    public interface ICrudPlugin<TEntity> : ICrudPlugin where TEntity : class
-    {
-        IRepository<TEntity> Repository { get; }
+        protected SchemaInfo BuildSchema(string name, string description);
+        protected void BuildSchemaProperties();
+        protected void RegisterSchema(SchemaInfo schema);
     }
 }
 ```
 
 ### 4.3 Custom Service Interface / 自定義服務介面
 
-For non-CRUD custom services, plugins implement `ICustomPlugin`:
+For non-CRUD custom services, plugins inherit from `CustomPluginBase`:
 
 ```csharp
-namespace SharedLib.Plugin.Abstractions
+namespace PluginBase
 {
-    /// <summary>
-    /// Interface for custom business logic services / 自定義業務邏輯服務的介面
-    /// </summary>
-    public interface ICustomPlugin : IPlugin
+    public abstract class CustomPluginBase : PluginBase, ICustomPlugin
     {
-        /// <summary>
-        /// Custom service handlers / 自定義服務處理程序
-        /// </summary>
-        IReadOnlyDictionary<string, RequestHandler> Handlers { get; }
+        public abstract IReadOnlyDictionary<string, RequestHandler> Handlers { get; }
+
+        protected void RegisterCustomSchema(string name, string description);
     }
 
-    /// <summary>
-    /// Delegate for handling custom requests / 用於處理自定義請求的委託
-    /// </summary>
-    public delegate Task<IResult> RequestHandler(HttpContext context);
+    public delegate Task RequestHandler(object context);
 }
 ```
 
@@ -215,76 +180,53 @@ namespace SharedLib.Plugin.Abstractions
 
 ## 5. Shared Library Components / 共用庫組件
 
-### 5.1 SharedLib.DB (Database Layer) / SharedLib.DB（數據庫層）
+### 5.1 Schema Attributes / Schema 屬性
 
 ```csharp
-// SharedLib.DB/Repositories/IRepository.cs
-namespace SharedLib.DB.Repositories
-{
-    public interface IRepository<T> where T : class
-    {
-        Task<T?> GetByIdAsync(int id);
-        Task<IReadOnlyList<T>> GetAllAsync();
-        Task<T> AddAsync(T entity);
-        Task<T> UpdateAsync(T entity);
-        Task<bool> DeleteAsync(int id);
-        Task<IReadOnlyList<T>> QueryAsync(Expression<Func<T, bool>> predicate);
-    }
-
-    public interface IUnitOfWork
-    {
-        Task<int> SaveChangesAsync();
-        IRepository<T> GetRepository<T>() where T : class;
-    }
-}
-```
-
-### 5.2 SharedLib.Schema (Schema Definitions) / SharedLib.Schema（Schema 定義）
-
-```csharp
-// SharedLib.Schema/Attributes/SchemaAttribute.cs
 namespace SharedLib.Schema.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
     public class SchemaAttribute : Attribute
     {
         public string Name { get; }
-        public string Description { get; }
-        public bool IsCrudEnabled { get; }
+        public string Description { get; set; }
+        public bool IsCrudEnabled { get; set; } = true;
     }
 
     [AttributeUsage(AttributeTargets.Property)]
     public class SchemaPropertyAttribute : Attribute
     {
-        public string Description { get; }
-        public bool IsRequired { get; }
-        public int? MaxLength { get; }
+        public string Description { get; set; }
+        public bool IsRequired { get; set; } = false;
+        public int MaxLength { get; set; }
     }
 }
+```
 
-// SharedLib.Schema/ISchemaService.cs
-namespace SharedLib.Schema.Services
+### 5.2 Schema Models / Schema 模型
+
+```csharp
+namespace SharedLib.Schema.Models
 {
-    public interface ISchemaService
-    {
-        SchemaInfo GetSchema(int functionId);
-        IReadOnlyList<SchemaInfo> GetAllSchemas();
-        SchemaInfo RegisterSchema(SchemaInfo schema);
-    }
-
     public record SchemaInfo(
         int FunctionId,
         string Name,
         string Description,
-        IReadOnlyList<PropertyInfo> Properties,
+        IReadOnlyList<SchemaPropertyInfo> Properties,
         string ServiceType); // "Crud" or "Custom"
+
+    public record SchemaPropertyInfo(
+        string Name,
+        string TypeName,
+        string Description,
+        bool IsRequired,
+        int? MaxLength);
 }
 ```
 
-### 5.3 SharedLib.Config (Configuration) / SharedLib.Config（配置）
+### 5.3 Configuration / 配置
 
 ```csharp
-// SharedLib.Config/ConfigurationExtensions.cs
 namespace SharedLib.Config
 {
     public class PluginHostOptions
@@ -292,12 +234,13 @@ namespace SharedLib.Config
         public string PluginsPath { get; set; } = "plugins";
         public bool EnableHotReload { get; set; } = false;
         public TimeSpan ScanInterval { get; set; } = TimeSpan.FromMinutes(1);
+        public string BaseUrl { get; set; } = "http://localhost:5000";
     }
 
     public class DatabaseOptions
     {
-        public string ConnectionString { get; set; } = "";
-        public DatabaseProvider Provider { get; set; } = DatabaseProvider.SqlServer;
+        public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
+        public string ConnectionString { get; set; } = "Data Source=pluginhost.db";
     }
 
     public enum DatabaseProvider
@@ -310,155 +253,70 @@ namespace SharedLib.Config
 }
 ```
 
-### 5.4 SharedLib.Logging (Logging Infrastructure) / SharedLib.Logging（日誌基礎設施）
-
-```csharp
-// SharedLib.Logging/IPluginLogger.cs
-namespace SharedLib.Logging
-{
-    public interface IPluginLogger
-    {
-        void LogInformation(string message, params object[] args);
-        void LogWarning(string message, params object[] args);
-        void LogError(string message, Exception? ex = null, params object[] args);
-        void LogDebug(string message, params object[] args);
-    }
-
-    public interface ILogFormatter
-    {
-        string Format(LogLevel level, string message, Exception? ex);
-    }
-}
-```
-
-### 5.5 SharedLib.Utils (Utility Functions) / SharedLib.Utils（工具函數）
-
-```csharp
-// SharedLib.Utils/CommonUtilities.cs
-namespace SharedLib.Utils
-{
-    public static class FunctionIdHelper
-    {
-        public static string GetPluginPath(int functionId, string basePath)
-            => Path.Combine(basePath, functionId.ToString()[0].ToString(), functionId.ToString());
-    }
-
-    public static class AssemblyHelper
-    {
-        public static IEnumerable<Type> GetDerivedTypes<TBase>(Assembly assembly);
-        public static IPlugin? CreatePluginInstance(Type pluginType);
-    }
-}
-```
-
 ---
 
 ## 6. Core Services Implementation / 核心服務實現
 
-### 6.1 Plugin Loader / 插件加載器
+### 6.1 Plugin Loader with Hot-Reload / 帶熱重載的插件加載器
 
 ```csharp
-// ApiHost/Services/PluginLoader.cs
 namespace ApiHost.Services
 {
-    public class PluginLoader : IPluginLoader
+    public class PluginLoader : IPluginLoader, IDisposable
     {
-        private readonly PluginHostOptions _options;
-        private readonly ILogger<PluginLoader> _logger;
-        private readonly Dictionary<int, IPlugin> _loadedPlugins = new();
+        private readonly Dictionary<int, IPlugin> _plugins = new();
+        private readonly ConcurrentDictionary<string, FileInfo> _loadedFiles = new();
+        private readonly ConcurrentDictionary<int, string> _pluginToFileMap = new();
+        private readonly Timer _scanTimer;
 
-        public async Task<IReadOnlyDictionary<int, IPlugin>> LoadPluginsAsync()
+        public IReadOnlyDictionary<int, IPlugin> Plugins => _plugins;
+        public event EventHandler<PluginsChangedEventArgs>? PluginsChanged;
+
+        public async Task LoadAndInitializePluginsAsync(IServiceProvider serviceProvider)
         {
-            var directories = Directory.GetDirectories(_options.PluginsPath, "*", SearchOption.AllDirectories);
-
-            foreach (var dir in directories)
+            await LoadPluginsFromFolderAsync();
+            if (_options.EnableHotReload)
             {
-                var dllFiles = Directory.GetFiles(dir, "*.dll");
-                foreach (var dll in dllFiles)
-                {
-                    await LoadPluginFromDllAsync(dll);
-                }
+                _scanTimer.Start();
             }
-
-            return _loadedPlugins;
         }
 
-        private async Task LoadPluginFromDllAsync(string dllPath)
+        private async Task ScanForChangesAsync()
         {
-            var assembly = Assembly.LoadFrom(dllPath);
-            var pluginTypes = assembly.GetTypes()
-                .Where(t => typeof(IPlugin).IsAssignableFrom(t) && !t.IsInterface);
-
-            foreach (var type in pluginTypes)
-            {
-                var plugin = (IPlugin)Activator.CreateInstance(type)!;
-                _loadedPlugins[plugin.FunctionId] = plugin;
-            }
+            // Detect added/removed/modified DLLs
+            // Raise PluginsChanged event for router to update
         }
     }
 }
 ```
 
-### 6.2 Router Manager / 路由管理器
+### 6.2 Dynamic Router / 動態路由管理器
 
 ```csharp
-// ApiHost/Services/RouterManager.cs
 namespace ApiHost.Services
 {
-    public class RouterManager : IRouterManager
+    public class PluginRouter
     {
-        private readonly Dictionary<int, IPlugin> _plugins;
-        private readonly ISchemaService _schemaService;
+        private readonly IPluginLoader _pluginLoader;
 
         public void RegisterRoutes(WebApplication app)
         {
-            foreach (var plugin in _plugins.Values)
+            // Use middleware for dynamic routing
+            app.Use(async (context, next) =>
             {
-                var routes = plugin.GetRoutes();
-                foreach (var route in routes)
+                var path = context.Request.Path.ToString();
+                foreach (var plugin in _pluginLoader.Plugins.Values)
                 {
-                    app.MapMethods(route.Path, new[] { route.Method.ToString() },
-                        async (HttpContext context) => await HandleRequest(plugin, context));
+                    var routes = plugin.GetRoutes();
+                    var matchingRoute = routes.FirstOrDefault(r => MatchPath(path, r.Path));
+                    if (matchingRoute != null)
+                    {
+                        await HandleRequest(context, plugin, matchingRoute);
+                        return;
+                    }
                 }
-            }
-
-            // Register schema service endpoint
-            app.MapGet("/schema", GetAllSchemas);
-            app.MapGet("/schema/{functionId}", GetSchemaByFunctionId);
-        }
-
-        private async Task HandleRequest(IPlugin plugin, HttpContext context)
-        {
-            // Delegate to plugin's request handler
-            // Use reflection to invoke appropriate handler based on route
-        }
-    }
-}
-```
-
-### 6.3 Schema Service / Schema 服務
-
-```csharp
-// ApiHost/Services/SchemaServiceImpl.cs
-namespace ApiHost.Services
-{
-    public class SchemaServiceImpl : ISchemaService
-    {
-        private readonly Dictionary<int, SchemaInfo> _schemas = new();
-
-        public SchemaInfo GetSchema(int functionId)
-        {
-            if (!_schemas.TryGetValue(functionId, out var schema))
-                throw new KeyNotFoundException($"Schema not found for function ID: {functionId}");
-            return schema;
-        }
-
-        public IReadOnlyList<SchemaInfo> GetAllSchemas() => _schemas.Values.ToList();
-
-        public SchemaInfo RegisterSchema(SchemaInfo schema)
-        {
-            _schemas[schema.FunctionId] = schema;
-            return schema;
+                await next();
+            });
         }
     }
 }
@@ -468,26 +326,33 @@ namespace ApiHost.Services
 
 ## 7. Service Endpoints / 服務端點
 
-### 7.1 Generic CRUD Endpoints / 通用 CRUD 端點
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/{functionId}` | Get all entities |
-| GET | `/api/{functionId}/{id}` | Get entity by ID |
-| POST | `/api/{functionId}` | Create new entity |
-| PUT | `/api/{functionId}/{id}` | Update entity |
-| DELETE | `/api/{functionId}/{id}` | Delete entity |
-
-### 7.2 Custom Service Endpoints / 自定義服務端點
-
-Custom endpoints are defined per plugin via `GetRoutes()` method.
-
-### 7.3 Schema Discovery Endpoints / Schema 發現端點
+### 7.1 Schema Discovery Endpoints / Schema 發現端點
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/schema` | Get all registered schemas |
 | GET | `/schema/{functionId}` | Get schema for specific function |
+
+### 7.2 Plugin Endpoints / 插件端點
+
+Endpoints are defined by each plugin via `GetRoutes()` method. Examples:
+
+**Product Service (Function ID: 1000)**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/products` | Get all products |
+| GET | `/api/products/{id}` | Get product by ID |
+| POST | `/api/products` | Create product |
+| PUT | `/api/products/{id}` | Update product |
+| DELETE | `/api/products/{id}` | Delete product |
+
+**Order Report Service (Function ID: 2000)**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/reports/orders/daily` | Get daily report |
+| GET | `/api/reports/orders/summary` | Get summary report |
 
 ---
 
@@ -496,177 +361,125 @@ Custom endpoints are defined per plugin via `GetRoutes()` method.
 ### 8.1 CRUD Plugin Example / CRUD 插件示例
 
 ```csharp
-// Plugins/Plugin1000/ProductPlugin.cs
-using SharedLib.Plugin.Abstractions;
-using SharedLib.DB.Repositories;
+// Plugin1000/ProductPlugin.cs
+using PluginBase;
 using SharedLib.Schema.Attributes;
 
-namespace Plugins.Plugin1000
+namespace Plugin1000;
+
+[Schema("Product", Description = "Product management")]
+public class Product
 {
-    [Schema(Name = "Product", Description = "Product management", IsCrudEnabled = true)]
-    public class ProductPlugin : ICrudPlugin<Product>
+    public int Id { get; set; }
+    [SchemaProperty(Description = "Product name", IsRequired = true, MaxLength = 100)]
+    public string Name { get; set; } = "";
+    [SchemaProperty(Description = "Product price")]
+    public decimal Price { get; set; }
+}
+
+public class ProductPlugin : CrudPluginBase<Product>
+{
+    private static readonly List<Product> _products = new()
     {
-        public int FunctionId => 1000;
-        public string Name => "Product Service";
-        public string Version => "1.0.0";
-        public Type EntityType => typeof(Product);
+        new Product { Id = 1, Name = "Product A", Price = 100.00m },
+        new Product { Id = 2, Name = "Product B", Price = 200.00m }
+    };
 
-        public IRepository<Product> Repository { get; }
+    public override int FunctionId => 1000;
+    public override string Name => "Product Service";
+    public override string Version => "1.0.0";
 
-        public ProductPlugin(IRepository<Product> repository)
+    public override Task InitializeAsync(IServiceProvider serviceProvider)
+    {
+        return base.InitializeAsync(serviceProvider).ContinueWith(_ =>
         {
-            Repository = repository;
-        }
-
-        public Task InitializeAsync(IServiceProvider serviceProvider)
-        {
-            // Initialization logic
-            return Task.CompletedTask;
-        }
-
-        public IReadOnlyList<PluginRoute> GetRoutes()
-        {
-            return new List<PluginRoute>
-            {
-                new("/api/products", HttpMethod.Get, typeof(void), typeof(List<Product>)),
-                new("/api/products/{id}", HttpMethod.Get, typeof(int), typeof(Product)),
-                new("/api/products", HttpMethod.Post, typeof(Product), typeof(Product)),
-                new("/api/products/{id}", HttpMethod.Put, typeof(Product), typeof(Product)),
-                new("/api/products/{id}", HttpMethod.Delete, typeof(void), typeof(bool))
-            };
-        }
+            BuildSchemaProperties();
+            var schema = BuildSchema("Product", "Product CRUD");
+            RegisterSchema(schema);
+        });
     }
 
-    public class Product
+    public override IReadOnlyList<PluginRoute> GetRoutes() => new List<PluginRoute>
     {
-        public int Id { get; set; }
-        [SchemaProperty(Description = "Product name", IsRequired = true, MaxLength = 100)]
-        public string Name { get; set; } = "";
-        [SchemaProperty(Description = "Product price")]
-        public decimal Price { get; set; }
-    }
+        new("/api/products", "GET"),
+        new("/api/products/{id}", "GET"),
+        new("/api/products", "POST"),
+        new("/api/products/{id}", "PUT"),
+        new("/api/products/{id}", "DELETE")
+    };
+
+    public override Task<IReadOnlyList<Product>> GetAllAsync() 
+        => Task.FromResult<IReadOnlyList<Product>>(_products.ToList());
+
+    public override Task<Product?> GetByIdAsync(int id) 
+        => Task.FromResult(_products.FirstOrDefault(p => p.Id == id));
+
+    // Implement CreateAsync, UpdateAsync, DeleteAsync...
 }
 ```
 
 ### 8.2 Custom Plugin Example / 自定義插件示例
 
 ```csharp
-// Plugins/Plugin2000/OrderReportPlugin.cs
-using SharedLib.Plugin.Abstractions;
+// Plugin2000/OrderReportPlugin.cs
+using PluginBase;
 
-namespace Plugins.Plugin2000
+namespace Plugin2000;
+
+public class OrderReportPlugin : CustomPluginBase
 {
-    public class OrderReportPlugin : ICustomPlugin
+    private readonly Dictionary<string, RequestHandler> _handlers = new();
+
+    public override int FunctionId => 2000;
+    public override string Name => "Order Report Service";
+    public override string Version => "1.0.0";
+
+    public override IReadOnlyDictionary<string, RequestHandler> Handlers => _handlers;
+
+    public override Task InitializeAsync(IServiceProvider serviceProvider)
     {
-        public int FunctionId => 2000;
-        public string Name => "Order Report Service";
-        public string Version => "1.0.0";
-
-        public IReadOnlyDictionary<string, RequestHandler> Handlers => new Dictionary<string, RequestHandler>
+        return base.InitializeAsync(serviceProvider).ContinueWith(_ =>
         {
-            ["/api/reports/orders/daily"] = HandleDailyReport,
-            ["/api/reports/orders/summary"] = HandleSummaryReport
-        };
+            RegisterCustomSchema("OrderReport", "Order reporting service");
+            _handlers["/api/reports/orders/daily"] = HandleDailyReport;
+        });
+    }
 
-        public Task InitializeAsync(IServiceProvider serviceProvider)
-            => Task.CompletedTask;
+    public override IReadOnlyList<PluginRoute> GetRoutes() => new List<PluginRoute>
+    {
+        new("/api/reports/orders/daily", "GET"),
+        new("/api/reports/orders/summary", "GET")
+    };
 
-        public IReadOnlyList<PluginRoute> GetRoutes()
+    private Task HandleDailyReport(object context)
+    {
+        if (context is HttpContext httpContext)
         {
-            return new List<PluginRoute>
-            {
-                new("/api/reports/orders/daily", HttpMethod.Get, typeof(void), typeof(byte[])),
-                new("/api/reports/orders/summary", HttpMethod.Get, typeof(void), typeof(byte[]))
-            };
+            var report = new { Date = DateTime.Now, TotalOrders = 150 };
+            return httpContext.Response.WriteAsJsonAsync(report);
         }
-
-        private async Task<IResult> HandleDailyReport(HttpContext context)
-        {
-            // Custom logic for daily order report
-            return Results.Ok(new { message = "Daily report generated" });
-        }
-
-        private async Task<IResult> HandleSummaryReport(HttpContext context)
-        {
-            // Custom logic for order summary
-            return Results.Ok(new { message = "Summary report generated" });
-        }
+        return Task.CompletedTask;
     }
 }
 ```
 
 ---
 
-## 9. Dependency Injection Configuration / 依賴注入配置
+## 9. Configuration / 配置
 
-### 9.1 Host Program.cs / 主程序配置
-
-```csharp
-// ApiHost/Program.cs
-var builder = WebApplication.CreateBuilder(args);
-
-// Load configuration
-var pluginOptions = builder.Configuration.GetSection("PluginHost").Get<PluginHostOptions>();
-var dbOptions = builder.Configuration.GetSection("Database").Get<DatabaseOptions>();
-
-// Register shared services
-builder.Services.AddSingleton(pluginOptions);
-builder.Services.AddSingleton(dbOptions);
-
-// Register database context
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-{
-    switch (dbOptions.Provider)
-    {
-        case DatabaseProvider.SqlServer:
-            options.UseSqlServer(dbOptions.ConnectionString);
-            break;
-        case DatabaseProvider.PostgreSql:
-            options.UseNpgsql(dbOptions.ConnectionString);
-            break;
-        // ... other providers
-    }
-});
-
-// Register repositories
-builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-
-// Register core services
-builder.Services.AddSingleton<ISchemaService, SchemaServiceImpl>();
-builder.Services.AddSingleton<IPluginLoader, PluginLoader>();
-
-// Add plugin services
-builder.Services.AddSingleton<IPluginRegistry, PluginRegistry>();
-
-var app = builder.Build();
-
-// Load plugins
-var pluginLoader = app.Services.GetRequiredService<IPluginLoader>();
-var plugins = await pluginLoader.LoadPluginsAsync();
-
-// Register routes
-var routerManager = app.Services.GetRequiredService<IRouterManager>();
-routerManager.RegisterRoutes(app);
-
-app.Run();
-```
-
----
-
-## 10. Configuration File / 配置文件
-
-### 10.1 appsettings.json
+### appsettings.json
 
 ```json
 {
   "PluginHost": {
     "PluginsPath": "plugins",
     "EnableHotReload": true,
-    "ScanInterval": "00:01:00"
+    "ScanInterval": "00:00:10",
+    "BaseUrl": "http://localhost:5000"
   },
   "Database": {
-    "Provider": "SqlServer",
-    "ConnectionString": "Server=localhost;Database=PluginHostDb;Trusted_Connection=true;"
+    "Provider": "Sqlite",
+    "ConnectionString": "Data Source=pluginhost.db"
   },
   "Logging": {
     "LogLevel": {
@@ -679,55 +492,66 @@ app.Run();
 
 ---
 
+## 10. Hot-Reload Feature / 熱重載功能
+
+### How It Works / 工作原理
+
+1. **Scan Interval**: Timer scans `plugins/functions/` folder every `ScanInterval` (default: 10 seconds)
+2. **Detect Changes**: Compare current DLL files with previously loaded files
+3. **Add Plugin**: New DLL detected → Load and initialize → Register routes
+4. **Remove Plugin**: DLL removed → Unload plugin → Remove routes
+5. **Modify Plugin**: DLL changed → Unload old → Load new → Update routes
+
+### Configuration / 配置
+
+```json
+"EnableHotReload": true,    // Enable/disable hot-reload
+"ScanInterval": "00:00:10"  // Scan every 10 seconds
+```
+
+---
+
 ## 11. Advantages of This Architecture / 此架構的優勢
 
 ### 11.1 Scalability / 可擴展性
-
-- Add new services by simply creating a new plugin folder and DLL
+- Add new services by simply copying DLL to plugins/functions/
 - No modification to core host required
 - Function IDs can be allocated to different teams/domains
 
-### 11.2 Maintainability / 可維護性
-
-- Shared library ensures consistent patterns across all plugins
+### 11.2 Maintainability / 可維助性
+- PluginBase provides consistent patterns across all plugins
 - Clear separation of concerns
 - Independent plugin development and deployment
 
 ### 11.3 Flexibility / 靈活性
-
 - Support both generic CRUD and custom business logic
-- Dynamic loading without restart (optional)
+- Dynamic loading with hot-reload (no restart needed)
 - Schema discovery for API documentation
 
-### 11.4 Security / 安全性
-
-- Plugins run in isolated context
-- Each plugin has its own folder preventing unauthorized access
-- Centralized configuration management
+### 11.4 Hot-Reload / 熱重載
+- Add plugins at runtime without stopping the server
+- Remove plugins at runtime
+- Modify and reload plugins at runtime
 
 ---
 
-## 12. Implementation Roadmap / 實現路線圖
+## 12. Implementation Status / 實現狀態
 
-### Phase 1: Core Infrastructure / 第一階段：核心基礎設施
-- [ ] Create solution structure
-- [ ] Implement SharedLib components
-- [ ] Build Plugin Loader service
+### Completed / 已完成
 
-### Phase 2: Plugin System / 第二階段：插件系統
-- [ ] Define IPlugin interface
-- [ ] Implement CRUD and Custom plugin base classes
-- [ ] Create Router Manager
-
-### Phase 3: API Host / 第三階段：API 主機
-- [ ] Implement Web API host
-- [ ] Add Schema Service endpoints
-- [ ] Configure dependency injection
-
-### Phase 4: Example Plugins / 第四階段：示例插件
-- [ ] Create sample CRUD plugin
-- [ ] Create sample custom plugin
-- [ ] Test end-to-end functionality
+- [x] Create solution structure
+- [x] Implement SharedLib components
+- [x] Build Plugin Loader service with hot-reload
+- [x] Define IPlugin interface
+- [x] Implement CRUD and Custom plugin base classes
+- [x] Create Dynamic Router
+- [x] Implement Web API host
+- [x] Add Schema Service endpoints
+- [x] Configure dependency injection
+- [x] Create sample CRUD plugin (Plugin1000)
+- [x] Create sample custom plugin (Plugin2000)
+- [x] Test end-to-end functionality
+- [x] Implement hot-reload (add/remove/modify)
 
 ---
 
@@ -735,11 +559,11 @@ app.Run();
 
 This proposal outlines a comprehensive architecture for a plugin-based web API host that:
 
-1. **Provides dynamic plugin loading** based on function ID with structured folder organization
-2. **Supports both generic CRUD and custom services** through specialized interfaces
-3. **Includes schema discovery** for all registered services
-4. **Leverages a shared library** for consistent DB, config, logging, and utilities
-5. **Built on modern .NET 8+** with full dependency injection support
+1. **Provides dynamic plugin loading** from `plugins/functions/` folder
+2. **Supports hot-reload** - add, remove, modify plugins without restart
+3. **Supports both generic CRUD and custom services** through specialized base classes
+4. **Includes schema discovery** for all registered plugins
+5. **Built on modern .NET 9+** with full dependency injection support
 
 The architecture is designed to be maintainable, scalable, and flexible for future expansion.
 
@@ -747,10 +571,10 @@ The architecture is designed to be maintainable, scalable, and flexible for futu
 
 本提案概述了一個全面的插件式 Web API 主機架構，其特點包括：
 
-1. **基於功能 ID 的動態插件加載**，採用結構化資料夾組織
-2. **同時支持通用 CRUD 和自定義服務**，通過專門的介面
-3. **包含所有已註冊服務的 schema 發現功能**
-4. **使用共用庫**確保一致的數據庫、配置、日誌和工具函數
-5. **基於現代 .NET 8+**，具有完整的依賴注入支持
+1. **從 `plugins/functions/` 資料夾動態加載插件**
+2. **支持熱重載** - 無需重啟即可添加、移除、修改插件
+3. **通過專門的基類同時支持通用 CRUD 和自定義服務**
+4. **為所有已註冊的插件提供 schema 發現功能**
+5. **基於現代 .NET 9+**，具有完整的依賴注入支持
 
 該架構旨在實現可維護性、可擴展性和未來擴展的靈活性。
