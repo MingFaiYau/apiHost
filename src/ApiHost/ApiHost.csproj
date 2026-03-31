@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="9.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.4" />
+    <PackageReference Include="YamlDotNet" Version="16.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharedLib\SharedLib.csproj" />
+    <ProjectReference Include="..\Plugins\PluginBase\PluginBase.csproj" />
+  </ItemGroup>
+
+  <!-- Copy SharedLib and PluginBase DLLs to output directory for plugin runtime dependencies -->
+  <Target Name="CopyDependencies" AfterTargets="Build">
+    <ItemGroup>
+      <SharedLibDll Include="..\SharedLib\bin\$(Configuration)\net9.0\SharedLib.dll" />
+      <PluginBaseDll Include="..\Plugins\PluginBase\bin\$(Configuration)\net9.0\PluginBase.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SharedLibDll)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PluginBaseDll)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
